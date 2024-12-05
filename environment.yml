@@ -1,0 +1,24 @@
+name: SimulatingScenarios
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - jupyter
+  - matplotlib>=3.8
+  - pandas>=2.0
+  - pandas-datareader
+  - pip>=24.0
+  - pyarrow
+  - py-xgboost
+  - scikit-learn>=1.4
+  - sqlalchemy
+  - xgboost>=2.0.3
+  - pmdarima>=2.0
+#  - tensorflow=2.9  # 降低版本以避免与 Python 3.12 的冲突
+  - pip:
+    - cinemagoer
+    - lxml
+    - pynytimes
+    - pyjokes==0.6.0
+    - plotly==5.24.0
+    - seaborn==0.13.2
