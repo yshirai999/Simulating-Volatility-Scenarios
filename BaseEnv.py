@@ -1,10 +1,7 @@
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import pandas as pd
-import datetime as dt
-from sklearn.preprocessing import MinMaxScaler
+from datetime import datetime as dt
 from data import dataclass
 from typing import List
 
@@ -19,13 +16,15 @@ class BaseClass(dataclass):
         self.tickers = tickers
         self.BG = dict()
         self.dates = dict()
+        self.df = dict()
         for t in self.tickers:
             loc = self.tickersloc[t]
-            BG = self.BGP[loc[0]]["parms"][self.BGP[loc[0]]["tickers"][loc[1]]]
-            self.BG[t] = BG[:][1:-2]
-            self.df[t] = pd.dataframe(self.BG[:][1:-2])
-            self.dates[t] = [int(d) for d in BG[:][0]]
-            self.dates[t] = [dt.strptime(d, '%Y%m%d').strftime('%m/%d/%Y') for d in self.dates]
+            BG = self.BGP[loc[0]]["parms"][self.BGP[loc[0]]["ticker"][loc[1]]]
+            d = str(int(BG[0][0]))
+            self.BG[t] = BG[:][1:-1]
+            self.df[t] = pd.DataFrame(np.transpose(self.BG[t]), columns = ["bp","cp","bn","cn"])
+            self.dates[t] = [str(int(d)) for d in BG[:][0]]
+            self.dates[t] = [dt.strptime(d, '%Y%m%d') for d in self.dates[t]]
         self.feature_steps = feature_steps
         self.target_steps = target_steps
         self.ts = {}
@@ -44,12 +43,9 @@ class BaseClass(dataclass):
         self.prc = {}
         self.scalers = {}
         self.test_pred_rescaled = {}
-        self.y_test_rescaled = {}
         for t in self.tickers:
             data = self.df[t].diff().dropna()
-            self.scalers[t] = MinMaxScaler()
-            data = self.scalers[t].fit_transform(data)
-            self.ts[t] = data#.values#.flatten()
+            self.ts[t] = data.values
             self.X[t], self.y[t] = self.ts_split(self.ts[t])
             self.split_ind[t] = int(self.X[t].shape[0]*0.8)
             self.X_train_full[t], self.y_train_full[t] = self.X[t][:self.split_ind[t]], self.y[t][:self.split_ind[t]]
@@ -57,65 +53,88 @@ class BaseClass(dataclass):
             self.split_ind_2[t] = int(self.X_train_full[t].shape[0]*0.8)
             self.X_train[t], self.y_train[t] = self.X_train_full[t][:self.split_ind_2[t]], self.y_train_full[t][:self.split_ind_2[t]]
             self.X_valid[t], self.y_valid[t] = self.X_train_full[t][self.split_ind_2[t]:], self.y_train_full[t][self.split_ind_2[t]:]
-            self.y_test_rescaled[t] = self.scalers[t].inverse_transform(self.y_test[t]).flatten()
     
-    def visualizedata(self
-    ):
-        print(self.df)
-        for t in self.tickers:
-            plt.plot(self.dates[t], self.df[t].values, '-', label = name)
-        plt.legend()
-        print(self.X_train_full['SPY'][0])
-        print(self.X_train_full['SPY'][1])
-        print(self.y_train_full['SPY'][0])
-
     def ts_split(self,
         ts
     ):
         feature_steps = self.feature_steps
         target_steps = self.target_steps
         n_obs = len(ts) - feature_steps - target_steps + 1
-        X = np.array([ts[idx:idx + feature_steps].flatten() for idx in range(n_obs)])
+        X = np.array([ts[idx:idx + feature_steps] for idx in range(n_obs)])
         y = np.array([ts[idx + feature_steps:idx + feature_steps + target_steps][:, -1]
                     for idx in range(n_obs)])
         return X, y
     
-    def Visualization(self,
-        model,
-        plot: bool = False,
-        logdiff: bool = True
+    def visualization_bVSc(self,
+        tickers
     ):
-        try:
-            if plot:
-                for name in self.tickers.groups.keys():
-                    plt.figure(figsize=(10, 5))
-                    if logdiff:
-                        plt.plot(self.test_dates[name][model], self.y_test_rescaled[name], label="Actual")
-                        plt.plot(self.test_dates[name][model], self.test_pred[name][model], label="Predicted")
-                    else:
-                        plt.plot(self.test_dates[name][model], self.y_test_prc[name][model], label="Actual")
-                        plt.plot(self.test_dates[name][model], self.y_pred_prc[name][model], label="Predicted")
-                    plt.title(f"{self.models_name_str[model]}: Predicted vs Actual log difference on test dataset for {name}")
-                    plt.xlabel("Time Steps")
-                    plt.ylabel("Price")
-                    plt.legend()
-                    plt.show()
+        bp = dict()
+        cp = dict()
+        bn = dict()
+        cn = dict()
+        bp["all"] = np.array([])
+        cp["all"] = np.array([])
+        bn["all"] = np.array([])
+        cn["all"] = np.array([])
+        
+        T = len(tickers)
 
-            print(f"{self.models_name_str[model]}: mean Squared Error for each ticker:")
-            for name in self.tickers.groups.keys():
-                print(f"{name}: Train MSE = {self.train_errors[name][model]:.4f}, Valid MSE = {self.valid_errors[name][model]:.4f}, Test MSE = {self.test_errors[name][model]:.4f}")
+        if T>1:
+            fig, axes = plt.subplots(len(tickers)+1, 2, figsize=(10, 3*(T+1)))
+        else:
+            fig, axes = plt.subplots(len(tickers), 2, figsize=(10, 5*T))
+
+        for t in range(T):
+            bp[t] = self.df[tickers[t]]["bp"].values
+            cp[t] = self.df[tickers[t]]["cp"].values
+            bn[t] = self.df[tickers[t]]["bn"].values
+            cn[t] = self.df[tickers[t]]["cn"].values
+
+            axes[t][0].scatter(bp[t], cp[t])
+            axes[t][0].set_xlabel('bp')
+            axes[t][0].set_ylabel('cp')
+            axes[t][0].set_title(tickers[t]+': Positive jumps')
+
+            axes[t][1].scatter(bn[t], cn[t])
+            axes[t][1].set_xlabel('bn')
+            axes[t][1].set_ylabel('cn')
+            axes[t][1].set_title(tickers[t]+': Negative jumps')
+
+            bp["all"] = np.concatenate([bp["all"],bp[t]])
+            cp["all"] = np.concatenate([cp["all"],cp[t]])
+            bn["all"] = np.concatenate([bn["all"],bn[t]])
+            cn["all"] = np.concatenate([cn["all"],cn[t]])
         
-        except:
-            raise TypeError("model not trained")
-        
-    def y_predict_rescaled(self,
-        model,
-        name,
-        n_test                   
+        if T > 1:
+            axes[t+1][0].scatter(bp["all"], cp["all"])
+            axes[t+1][0].set_xlabel('bp')
+            axes[t+1][0].set_ylabel('cp')
+            axes[t+1][0].set_title('All tickers: Positive jumps')
+
+            axes[t+1][1].scatter(bp["all"], cp["all"])
+            axes[t+1][1].set_xlabel('bp')
+            axes[t+1][1].set_ylabel('cp')
+            axes[t+1][1].set_title('All tickers: Positive jumps')
+
+        plt.tight_layout()
+        plt.show()
+
+    def visualization_ts_bc(self,
+        tickers
     ):
-        try:
-            self.test_pred[name][model] = self.scalers[name].inverse_transform(self.test_pred[name][model]).flatten()
-            self.y_pred_prc[name][model] = [np.exp(self.test_pred[name][model][i])*self.prc[name][-n_test:][i] for i in range(n_test)]
-            self.y_test_prc[name][model] = self.prc[name][-n_test:]
-        except:
-            raise TypeError("model not trained")
+        ts = dict()        
+        var = ["bp", "cp", "bn", "cn"]
+        T = len(tickers)
+        fig, axes = plt.subplots(len(tickers), 4, figsize=(15, 5*T))
+
+        for t in range(T):
+            ts[t] = []
+            for i in range(4):
+                ts[t].append(self.df[tickers[t]][var[i]].values)
+                axes[t][i].plot(self.dates[tickers[t]],ts[t][i])
+                axes[t][i].set_xlabel('date')
+                axes[t][i].set_ylabel('bp')
+                axes[t][i].set_title(tickers[t]+': '+var[i])
+
+        plt.tight_layout()
+        plt.show()
