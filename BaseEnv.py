@@ -61,7 +61,7 @@ class BaseClass(dataclass):
         target_steps = self.target_steps
         n_obs = len(ts) - feature_steps - target_steps + 1
         X = np.array([ts[idx:idx + feature_steps] for idx in range(n_obs)])
-        y = np.array([ts[idx + feature_steps:idx + feature_steps + target_steps][:, -1]
+        y = np.array([ts[idx + feature_steps:idx + feature_steps + target_steps][-1,:]
                     for idx in range(n_obs)])
         return X, y
     
