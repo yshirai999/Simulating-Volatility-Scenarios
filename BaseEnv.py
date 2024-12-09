@@ -45,7 +45,7 @@ class BaseClass(dataclass):
         self.test_pred_rescaled = {}
         for t in self.tickers:
             data = self.df[t].diff().dropna()
-            self.ts[t] = data.values
+            self.ts[t] = data.values[:,[0,3]]
             self.X[t], self.y[t] = self.ts_split(self.ts[t])
             self.split_ind[t] = int(self.X[t].shape[0]*0.8)
             self.X_train_full[t], self.y_train_full[t] = self.X[t][:self.split_ind[t]], self.y[t][:self.split_ind[t]]
@@ -90,12 +90,12 @@ class BaseClass(dataclass):
             bn[t] = self.df[tickers[t]]["bn"].values
             cn[t] = self.df[tickers[t]]["cn"].values
 
-            axes[t][0].scatter(bp[t], cp[t])
+            axes[t][0].scatter(bp[t], cp[t],s=1)
             axes[t][0].set_xlabel('bp')
             axes[t][0].set_ylabel('cp')
             axes[t][0].set_title(tickers[t]+': Positive jumps')
 
-            axes[t][1].scatter(bn[t], cn[t])
+            axes[t][1].scatter(bn[t], cn[t],s=1)
             axes[t][1].set_xlabel('bn')
             axes[t][1].set_ylabel('cn')
             axes[t][1].set_title(tickers[t]+': Negative jumps')
@@ -106,12 +106,12 @@ class BaseClass(dataclass):
             cn["all"] = np.concatenate([cn["all"],cn[t]])
         
         if T > 1:
-            axes[t+1][0].scatter(bp["all"], cp["all"])
+            axes[t+1][0].scatter(bp["all"], cp["all"],s=1)
             axes[t+1][0].set_xlabel('bp')
             axes[t+1][0].set_ylabel('cp')
             axes[t+1][0].set_title('All tickers: Positive jumps')
 
-            axes[t+1][1].scatter(bp["all"], cp["all"])
+            axes[t+1][1].scatter(bp["all"], cp["all"],s=1)
             axes[t+1][1].set_xlabel('bp')
             axes[t+1][1].set_ylabel('cp')
             axes[t+1][1].set_title('All tickers: Positive jumps')
@@ -119,13 +119,72 @@ class BaseClass(dataclass):
         plt.tight_layout()
         plt.show()
 
+
+    def visualization_bVSc_3D(self,
+        tickers
+    ):
+        bp = dict()
+        cp = dict()
+        bn = dict()
+        cn = dict()
+        bp["all"] = np.array([])
+        cp["all"] = np.array([])
+        bn["all"] = np.array([])
+        cn["all"] = np.array([])
+        
+        T = len(tickers)
+
+        for t in range(T):
+            bp[t] = self.df[tickers[t]]["bp"].values
+            cp[t] = self.df[tickers[t]]["cp"].values
+            bn[t] = self.df[tickers[t]]["bn"].values
+            cn[t] = self.df[tickers[t]]["cn"].values
+
+            fig = plt.figure()
+
+            ax = fig.add_subplot(1,2,1,projection='3d')
+            ax.scatter(bp[t],bn[t],cp[t],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('bn')
+            ax.set_title(tickers[t]+': Positive jumps')
+
+            ax = fig.add_subplot(1,2,2,projection='3d')
+            ax.scatter(bp[t],bn[t],cn[t], s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('bn')
+            ax.set_title(tickers[t]+': Negative jumps')
+
+            plt.tight_layout()
+            plt.show()
+
+            bp["all"] = np.concatenate([bp["all"],bp[t]])
+            cp["all"] = np.concatenate([cp["all"],cp[t]])
+            bn["all"] = np.concatenate([bn["all"],bn[t]])
+            cn["all"] = np.concatenate([cn["all"],cn[t]])
+    
+        if T > 1:
+            fig = plt.figure()
+
+            ax = fig.add_subplot(1,2,1,projection='3d')
+            ax.scatter(bp['all'],bn['all'],cp['all'],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('bn')
+            ax.set_title('All: Positive jumps')
+
+            ax = fig.add_subplot(1,2,2,projection='3d')
+            ax.scatter(bp['all'],bn['all'],cn['all'],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('bn')
+            ax.set_title('All: Negative jumps')
+        
+
     def visualization_ts_bc(self,
         tickers
     ):
         ts = dict()        
         var = ["bp", "cp", "bn", "cn"]
         T = len(tickers)
-        fig, axes = plt.subplots(len(tickers), 4, figsize=(15, 5*T))
+        fig, axes = plt.subplots(T, 4, figsize=(15, 5*T))
 
         for t in range(T):
             ts[t] = []
