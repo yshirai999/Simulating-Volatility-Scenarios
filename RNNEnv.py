@@ -1,5 +1,6 @@
 from BaseEnv import BaseClass
 import tensorflow as tf
+import pandas as pd
 from tensorflow.keras.layers import SimpleRNN, LSTM, Dense, Dropout, TimeDistributed, BatchNormalization
 from tensorflow.keras.models import Sequential
 from keras.losses import Huber, MeanSquaredError, MeanAbsoluteError, MeanSquaredLogarithmicError, CosineSimilarity
@@ -19,11 +20,17 @@ class RNNClass(BaseClass):
         feature_steps: int = 10,
         target_steps: int = 1,
         batchnormalization: bool = False,
+        epochs: int = 500,
+        patience: int = 200,
+        HuberDelta: float = 0.0001,
         layers_RNN: int = 2,
         layers_LSTM: int = 2,
         tickers: List[str] = ['aapl']
     ):  
         super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers)
+        self.epochs = epochs
+        self.patience = patience
+        self.HuberDelta = HuberDelta
         self.models = {}
         self.bn = batchnormalization
         self.layers = {SimpleRNN: layers_RNN, LSTM: layers_LSTM}
@@ -51,7 +58,8 @@ class RNNClass(BaseClass):
             self.history[t] = {}
 
     def Prediction(self,
-        model
+        model,
+        verbose: bool = False
     ):
         for t in self.tickers:
             self.reset_session()
@@ -64,22 +72,23 @@ class RNNClass(BaseClass):
 
             if model in [SimpleRNN, LSTM]:
                 m = self.models_function_name[model](input_shape=input_shape, output_units=output_units, layers = self.layers[model])
-                m.compile(loss=Huber(), optimizer="nadam")
+                m.compile(loss=Huber(delta=self.HuberDelta), optimizer="nadam")
             else:
                 raise TypeError("model must be SimpleRNN or LSTM")
             
 
-            early_stopping_cb = tf.keras.callbacks.EarlyStopping(patience=200,
+            early_stopping_cb = tf.keras.callbacks.EarlyStopping(patience=self.patience,
                                                               min_delta=0.01,
                                                               restore_best_weights=True)
             
-            m.summary()
+            if verbose:
+                m.summary()
 
-            self.history[t][model] = m.fit(self.X_train[t][..., np.newaxis], self.y_train[t][..., np.newaxis], epochs=50,
+            self.history[t][model] = m.fit(self.X_train[t][..., np.newaxis], self.y_train[t][..., np.newaxis], epochs=self.epochs,
                                               validation_data=(self.X_valid[t][..., np.newaxis], self.y_valid[t][..., np.newaxis]),
                                               callbacks=[early_stopping_cb], verbose=0)
 
-            #pd.DataFrame(run.history).iloc[-11:]
+            #pd.DataFrame(self.history[t][model].history).iloc[-11:]
 
             self.train_pred[t][model] = m.predict(self.X_train[t])
             self.valid_pred[t][model] = m.predict(self.X_valid[t])
