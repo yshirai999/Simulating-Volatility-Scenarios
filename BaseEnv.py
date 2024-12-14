@@ -45,7 +45,7 @@ class BaseClass(dataclass):
         self.test_pred_rescaled = {}
         for t in self.tickers:
             data = self.df[t].diff().dropna()
-            self.ts[t] = data.values[:,[0,3]]
+            self.ts[t] = data.values[:,[0,2]]
             self.X[t], self.y[t] = self.ts_split(self.ts[t])
             self.split_ind[t] = int(self.X[t].shape[0]*0.8)
             self.X_train_full[t], self.y_train_full[t] = self.X[t][:self.split_ind[t]], self.y[t][:self.split_ind[t]]
@@ -79,26 +79,28 @@ class BaseClass(dataclass):
         
         T = len(tickers)
 
-        if T>1:
-            fig, axes = plt.subplots(len(tickers)+1, 2, figsize=(10, 3*(T+1)))
-        else:
-            fig, axes = plt.subplots(len(tickers), 2, figsize=(10, 5*T))
-
         for t in range(T):
+            fig = plt.figure()
+
+            ax = fig.add_subplot(1,2,1)
             bp[t] = self.df[tickers[t]]["bp"].values
             cp[t] = self.df[tickers[t]]["cp"].values
             bn[t] = self.df[tickers[t]]["bn"].values
             cn[t] = self.df[tickers[t]]["cn"].values
 
-            axes[t][0].scatter(bp[t], cp[t],s=1)
-            axes[t][0].set_xlabel('bp')
-            axes[t][0].set_ylabel('cp')
-            axes[t][0].set_title(tickers[t]+': Positive jumps')
+            ax.scatter(bp[t], cp[t],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('cp')
+            ax.set_title(tickers[t]+': Positive jumps')
 
-            axes[t][1].scatter(bn[t], cn[t],s=1)
-            axes[t][1].set_xlabel('bn')
-            axes[t][1].set_ylabel('cn')
-            axes[t][1].set_title(tickers[t]+': Negative jumps')
+            ax = fig.add_subplot(1,2,2)
+            ax.scatter(bn[t], cn[t],s=1)
+            ax.set_xlabel('bn')
+            ax.set_ylabel('cn')
+            ax.set_title(tickers[t]+': Negative jumps')
+
+            plt.tight_layout()
+            plt.show()
 
             bp["all"] = np.concatenate([bp["all"],bp[t]])
             cp["all"] = np.concatenate([cp["all"],cp[t]])
@@ -106,18 +108,23 @@ class BaseClass(dataclass):
             cn["all"] = np.concatenate([cn["all"],cn[t]])
         
         if T > 1:
-            axes[t+1][0].scatter(bp["all"], cp["all"],s=1)
-            axes[t+1][0].set_xlabel('bp')
-            axes[t+1][0].set_ylabel('cp')
-            axes[t+1][0].set_title('All tickers: Positive jumps')
+            fig = plt.figure()
+            ax = fig.add_subplot(1,2,1)
+            ax.scatter(bp["all"], cp["all"],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('cp')
+            ax.set_title('All tickers: Positive jumps')
 
-            axes[t+1][1].scatter(bp["all"], cp["all"],s=1)
-            axes[t+1][1].set_xlabel('bp')
-            axes[t+1][1].set_ylabel('cp')
-            axes[t+1][1].set_title('All tickers: Positive jumps')
+            ax = fig.add_subplot(1,2,2)
+            ax.scatter(bp["all"], cp["all"],s=1)
+            ax.set_xlabel('bp')
+            ax.set_ylabel('cp')
+            ax.set_title('All tickers: Positive jumps')
 
-        plt.tight_layout()
-        plt.show()
+            plt.tight_layout()
+            plt.show()
+
+
 
 
     def visualization_bVSc_3D(self,
@@ -184,16 +191,16 @@ class BaseClass(dataclass):
         ts = dict()        
         var = ["bp", "cp", "bn", "cn"]
         T = len(tickers)
-        fig, axes = plt.subplots(T, 4, figsize=(15, 5*T))
 
         for t in range(T):
             ts[t] = []
+            fig, axes = plt.subplots(1, 4, figsize=(15, 5))
             for i in range(4):
                 ts[t].append(self.df[tickers[t]][var[i]].values)
-                axes[t][i].plot(self.dates[tickers[t]],ts[t][i])
-                axes[t][i].set_xlabel('date')
-                axes[t][i].set_ylabel('bp')
-                axes[t][i].set_title(tickers[t]+': '+var[i])
-
-        plt.tight_layout()
-        plt.show()
+                axes[i].plot(self.dates[tickers[t]],ts[t][i])
+                axes[i].set_xlabel('date')
+                axes[i].set_ylabel(var[i])
+                axes[i].set_title(tickers[t]+': '+var[i])
+                
+            plt.tight_layout()
+            plt.show()

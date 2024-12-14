@@ -3,6 +3,7 @@ import tensorflow as tf
 import pandas as pd
 from tensorflow.keras.layers import SimpleRNN, LSTM, Dense, Dropout, TimeDistributed, BatchNormalization
 from tensorflow.keras.models import Sequential
+from tensorflow.keras import optimizers
 from keras.losses import Huber, MeanSquaredError, MeanAbsoluteError, MeanSquaredLogarithmicError, CosineSimilarity
 from sklearn.metrics import mean_squared_error
 import numpy as np
@@ -22,7 +23,9 @@ class RNNClass(BaseClass):
         batchnormalization: bool = False,
         epochs: int = 500,
         patience: int = 200,
-        HuberDelta: float = 0.0001,
+        learning_rate: float = 0.0001,
+        HuberDelta_p: float = 1,
+        HuberDelta_n: float = 1,
         layers_RNN: int = 2,
         layers_LSTM: int = 2,
         tickers: List[str] = ['aapl']
@@ -30,7 +33,9 @@ class RNNClass(BaseClass):
         super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers)
         self.epochs = epochs
         self.patience = patience
-        self.HuberDelta = HuberDelta
+        self.HuberDelta_p = HuberDelta_p
+        self.HuberDelta_n = HuberDelta_n
+        self.learning_rate = learning_rate,
         self.models = {}
         self.bn = batchnormalization
         self.layers = {SimpleRNN: layers_RNN, LSTM: layers_LSTM}
@@ -67,12 +72,21 @@ class RNNClass(BaseClass):
             n_valid = len(self.X_valid[t])
             n_test = len(self.X_test[t])
 
-            input_shape = (self.X_train[t].shape[1],self.X_train[t].shape[2])
-            output_units = self.y_train[t].shape[1] if len(self.y_train[t].shape) > 1 else 1
+            input_shape = [None,1] #(self.X_train[t].shape[1],1) #(self.X_train[t].shape[1],self.X_train[t].shape[2])
+            output_units = 1 #self.y_train[t].shape[1] if len(self.y_train[t].shape) > 1 else 1
+
+            optimizerp = optimizers.Nadam(learning_rate=self.learning_rate)
+            optimizern = optimizers.Nadam(learning_rate=self.learning_rate)
 
             if model in [SimpleRNN, LSTM]:
-                m = self.models_function_name[model](input_shape=input_shape, output_units=output_units, layers = self.layers[model])
-                m.compile(loss=Huber(delta=self.HuberDelta), optimizer="nadam")
+                
+                mp = self.models_function_name[model](input_shape=input_shape, output_units=output_units, layers = self.layers[model])
+                mp.compile(loss=Huber(delta=self.HuberDelta_p), optimizer=optimizerp)
+                mn = self.models_function_name[model](input_shape=input_shape, output_units=output_units, layers = self.layers[model])
+                mn.compile(loss=Huber(delta=self.HuberDelta_n), optimizer=optimizern)
+
+                # m = self.models_function_name[model](input_shape=input_shape, output_units=output_units, layers = self.layers[model])
+                # m.compile(loss=Huber(delta=self.HuberDelta), optimizer="nadam")
             else:
                 raise TypeError("model must be SimpleRNN or LSTM")
             
@@ -82,17 +96,35 @@ class RNNClass(BaseClass):
                                                               restore_best_weights=True)
             
             if verbose:
-                m.summary()
+                mp.summary()
+                mn.summary()
 
-            self.history[t][model] = m.fit(self.X_train[t][..., np.newaxis], self.y_train[t][..., np.newaxis], epochs=self.epochs,
-                                              validation_data=(self.X_valid[t][..., np.newaxis], self.y_valid[t][..., np.newaxis]),
-                                              callbacks=[early_stopping_cb], verbose=0)
+            X_train0 = self.X_train[t][:,:,0][..., np.newaxis]
+            y_train0 = self.y_train[t][:,0][..., np.newaxis]
+            X_valid0 = self.X_valid[t][:,:,0][..., np.newaxis]
+            y_valid0 = self.y_valid[t][:,0][..., np.newaxis]
+
+            X_train1 = self.X_train[t][:,:,1][..., np.newaxis]
+            y_train1 = self.y_train[t][:,1][..., np.newaxis]
+            X_valid1 = self.X_valid[t][:,:,1][..., np.newaxis]
+            y_valid1 = self.y_valid[t][:,1][..., np.newaxis]
+
+            self.history[t][model] = [mp.fit(X_train0, y_train0, epochs=self.epochs, validation_data=(X_valid0, y_valid0), callbacks=[early_stopping_cb], verbose=0),
+                                      mn.fit(X_train1, y_train1, epochs=self.epochs, validation_data=(X_valid1, y_valid1), callbacks=[early_stopping_cb], verbose=0)]
+
+            # self.history[t][model] = m.fit(self.X_train[t][..., np.newaxis], self.y_train[t][..., np.newaxis], epochs=self.epochs,
+            #                                   validation_data=(self.X_valid[t][..., np.newaxis], self.y_valid[t][..., np.newaxis]),
+            #                                   callbacks=[early_stopping_cb], verbose=0)
 
             #pd.DataFrame(self.history[t][model].history).iloc[-11:]
 
-            self.train_pred[t][model] = m.predict(self.X_train[t])
-            self.valid_pred[t][model] = m.predict(self.X_valid[t])
-            self.test_pred[t][model] = m.predict(self.X_test[t])
+            self.train_pred[t][model] = np.column_stack((mp.predict(self.X_train[t][:,:,0]),mn.predict(self.X_train[t][:,:,1])))
+            self.valid_pred[t][model] = np.column_stack((mp.predict(self.X_valid[t][:,:,0]),mn.predict(self.X_valid[t][:,:,1])))
+            self.test_pred[t][model] = np.column_stack((mp.predict(self.X_test[t][:,:,0]),mn.predict(self.X_test[t][:,:,1])))
+
+            # self.train_pred[t][model] = m.predict(self.X_train[t])
+            # self.valid_pred[t][model] = m.predict(self.X_valid[t])
+            # self.test_pred[t][model] = m.predict(self.X_test[t])
 
             self.train_errors[t][model] = mean_squared_error(self.y_train[t], self.train_pred[t][model])
             self.valid_errors[t][model] = mean_squared_error(self.y_valid[t], self.valid_pred[t][model])
@@ -100,7 +132,7 @@ class RNNClass(BaseClass):
 
             self.test_dates[t][model] = self.dates[t][-n_test:]
 
-            self.models[t][model] = m
+            self.models[t][model] = [mp,mn]
 
     def rnn_dense_model(self,
         input_shape,
