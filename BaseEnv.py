@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime as dt
 from data import dataclass
 from typing import List
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 class BaseClass(dataclass):
 
@@ -11,6 +12,7 @@ class BaseClass(dataclass):
     tickers: List[str] = ['aapl'],
     feature_steps: int = 10,
     target_steps: int = 1,
+    scaler = StandardScaler
     ):
         super().__init__()
         self.tickers = tickers
@@ -43,9 +45,14 @@ class BaseClass(dataclass):
         self.prc = {}
         self.scalers = {}
         self.test_pred_rescaled = {}
+        self.scaler = {}
+
         for t in self.tickers:
             data = self.df[t].diff().dropna()
             self.ts[t] = data.values[:,[0,2]]
+            self.scaler[t] = scaler()
+            self.scaler[t].fit(self.ts[t])
+            self.ts[t] = self.scaler[t].transform(self.ts[t])
             self.X[t], self.y[t] = self.ts_split(self.ts[t])
             self.split_ind[t] = int(self.X[t].shape[0]*0.8)
             self.X_train_full[t], self.y_train_full[t] = self.X[t][:self.split_ind[t]], self.y[t][:self.split_ind[t]]

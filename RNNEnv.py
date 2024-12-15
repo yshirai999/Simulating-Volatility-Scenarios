@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import List
 import keras.backend as K
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -28,9 +29,10 @@ class RNNClass(BaseClass):
         HuberDelta_n: float = 1,
         layers_RNN: int = 2,
         layers_LSTM: int = 2,
-        tickers: List[str] = ['aapl']
+        tickers: List[str] = ['aapl'],
+        scaler = StandardScaler
     ):  
-        super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers)
+        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler)
         self.epochs = epochs
         self.patience = patience
         self.HuberDelta_p = HuberDelta_p
@@ -74,9 +76,8 @@ class RNNClass(BaseClass):
 
             input_shape = [None,1] #(self.X_train[t].shape[1],1) #(self.X_train[t].shape[1],self.X_train[t].shape[2])
             output_units = 1 #self.y_train[t].shape[1] if len(self.y_train[t].shape) > 1 else 1
-
-            optimizerp = optimizers.Nadam(learning_rate=self.learning_rate)
-            optimizern = optimizers.Nadam(learning_rate=self.learning_rate)
+            optimizerp = optimizers.Nadam(learning_rate=self.learning_rate[0])
+            optimizern = optimizers.Nadam(learning_rate=self.learning_rate[0])
 
             if model in [SimpleRNN, LSTM]:
                 
