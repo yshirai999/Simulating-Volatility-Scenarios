@@ -19,7 +19,7 @@ class RegressionClass(BaseClass):
     def __init__(self,
         feature_steps: int = 10,
         target_steps: int = 1,
-        tickers: List[str] = ['aapl']
+        tickers: List[str] = ['spy']
     ):  
         super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers)
         self.models = {}

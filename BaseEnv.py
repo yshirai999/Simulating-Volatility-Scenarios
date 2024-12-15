@@ -9,7 +9,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 class BaseClass(dataclass):
 
     def __init__(self,
-    tickers: List[str] = ['aapl'],
+    tickers: List[str] = ['spy'],
     feature_steps: int = 10,
     target_steps: int = 1,
     scaler = StandardScaler

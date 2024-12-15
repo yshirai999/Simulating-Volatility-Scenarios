@@ -29,7 +29,7 @@ class RNNClass(BaseClass):
         HuberDelta_n: float = 1,
         layers_RNN: int = 2,
         layers_LSTM: int = 2,
-        tickers: List[str] = ['aapl'],
+        tickers: List[str] = ['spy'],
         scaler = StandardScaler
     ):  
         super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler)

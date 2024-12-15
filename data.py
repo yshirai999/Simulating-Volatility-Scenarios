@@ -5,15 +5,20 @@ import os
 class dataclass:
 
     def __init__(self,
-        folder = '//Simulating-Volatility-Scenarios//Data//'
+        folder = '//Simulating-Volatility-Scenarios//Data1//'
     ):
         self.path = os.path.dirname(os.getcwd()) 
-        folder = self.path+folder
+        dir_path = self.path+folder
+        count = 0
+        for path in os.listdir(dir_path):
+            # check if current path is a file
+            if os.path.isfile(os.path.join(dir_path, path)):
+                count += 1
         self.BGP = dict()
         self.tickersloc = dict()
-        for k in range(1,5):
+        for k in range(1,count+1):
             self.BGP[k] = dict()
-            filepath = f"{folder}BGP{k}.mat"
+            filepath = f"{dir_path}BGP{k}.mat"
             f = h5py.File(filepath, "r")
             path=f"/d{k}r/"
             group = f[path]
@@ -32,4 +37,3 @@ class dataclass:
                 self.BGP[k]["parms"][self.BGP[k]["ticker"][count]] = np.array(f[sp])
                 self.tickersloc[self.BGP[k]["ticker"][count]] = [k,count]
                 count += 1
-    
