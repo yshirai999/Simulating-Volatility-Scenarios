@@ -16,6 +16,8 @@
 
 - An example containing SPY and 11 sector ETFs is in the Data1 folder
 
+- Scale parameters are quantized by default
+
 ## Classes
 
 - The classes in the python files data.py and BaseEnv.py read and process the data in the BGP.mat file
