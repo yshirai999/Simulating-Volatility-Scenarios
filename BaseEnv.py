@@ -12,6 +12,8 @@ class BaseClass(dataclass):
     tickers: List[str] = ['spy'],
     feature_steps: int = 10,
     target_steps: int = 1,
+    quantized: bool = True,
+    nclusters: int = 525,
     scaler = StandardScaler
     ):
         super().__init__()
@@ -19,9 +21,14 @@ class BaseClass(dataclass):
         self.BG = dict()
         self.dates = dict()
         self.df = dict()
+        if quantized:
+            self.BGPquant = self.quantization(nclusters)
         for t in self.tickers:
             loc = self.tickersloc[t]
-            BG = self.BGP[loc[0]]["parms"][self.BGP[loc[0]]["ticker"][loc[1]]]
+            if quantized:
+                BG = self.BGPquant[loc[0]]["parms"][self.BGP[loc[0]]["ticker"][loc[1]]]
+            else:
+                BG = self.BGP[loc[0]]["parms"][self.BGP[loc[0]]["ticker"][loc[1]]]
             d = str(int(BG[0][0]))
             self.BG[t] = BG[:][1:-1]
             self.df[t] = pd.DataFrame(np.transpose(self.BG[t]), columns = ["bp","cp","bn","cn"])

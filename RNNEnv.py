@@ -30,9 +30,11 @@ class RNNClass(BaseClass):
         layers_RNN: int = 2,
         layers_LSTM: int = 2,
         tickers: List[str] = ['spy'],
+        quantized: bool = True,
+        nclusters: int = 525,
         scaler = StandardScaler
     ):  
-        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler)
+        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, quantized = quantized, nclusters = nclusters, scaler = scaler)
         self.epochs = epochs
         self.patience = patience
         self.HuberDelta_p = HuberDelta_p

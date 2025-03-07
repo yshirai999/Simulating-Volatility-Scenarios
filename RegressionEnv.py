@@ -19,9 +19,11 @@ class RegressionClass(BaseClass):
     def __init__(self,
         feature_steps: int = 10,
         target_steps: int = 1,
-        tickers: List[str] = ['spy']
+        tickers: List[str] = ['spy'],
+        quantized: bool = True,
+        nclusters: int = 525
     ):  
-        super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers)
+        super().__init__(feature_steps = feature_steps, target_steps = target_steps, tickers=tickers, quantized = quantized, nclusters = nclusters)
         self.models = {}
         self.models_name_str = {LinearRegression: "LinearRegression", ARIMA: "ARIMA"}
         self.train_series = {}
