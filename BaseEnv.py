@@ -71,6 +71,7 @@ class BaseClass(dataclass):
     def ts_split(self,
         ts
     ):
+
         feature_steps = self.feature_steps
         target_steps = self.target_steps
         n_obs = len(ts) - feature_steps - target_steps + 1
