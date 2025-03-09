@@ -1,4 +1,4 @@
-name: SimulatingScenarios
+name: simenv
 channels:
   - conda-forge
 dependencies:
