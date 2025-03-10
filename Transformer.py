@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.init as init
 import numpy as np
 from BaseEnv import BaseClass
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 """
 Encodes position of the input, other wise transfomer views all inputs the same
@@ -33,7 +36,7 @@ class CauchyLoss(nn.Module):
         return loss.mean()
 
 class TransformerModel(nn.Module):
-    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, decoder=False):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale):
         super(TransformerModel, self).__init__()
         
         self.embedding = nn.Linear(input_dim, d_model) # encode the input
@@ -51,6 +54,36 @@ class TransformerModel(nn.Module):
             batch_first=True,
         )
         self.output_layer = nn.Linear(d_model, output_dim)
+        self._init_weights(scale)
+    
+    def _init_weights(self, scale=2.0):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                # Initialize Linear layers with Xavier uniform distribution
+                init.xavier_uniform_(m.weight)
+                m.weight = torch.nn.Parameter(scale * m.weight.data)
+                if m.bias is not None:
+                    init.zeros_(m.bias)
+            elif isinstance(m, nn.MultiheadAttention):
+                # Initialize MultiheadAttention weights (Q, K, V, and output projection)
+                init.xavier_uniform_(m.in_proj_weight)
+                m.in_proj_weight = torch.nn.Parameter(scale * m.in_proj_weight.data)
+                init.xavier_uniform_(m.out_proj.weight)
+                m.out_proj.weight = torch.nn.Parameter(scale * m.out_proj.weight.data)
+                if m.in_proj_bias is not None:
+                    init.zeros_(m.in_proj_bias)
+                if m.out_proj.bias is not None:
+                    init.zeros_(m.out_proj.bias)
+            elif isinstance(m, nn.TransformerEncoderLayer) or isinstance(m, nn.TransformerDecoderLayer):
+                # Initialize feedforward layers within the encoder/decoder layers
+                init.xavier_uniform_(m.linear1.weight)
+                m.linear1.weight = torch.nn.Parameter(m.linear1.weight.data * scale)
+                init.xavier_uniform_(m.linear2.weight)
+                m.linear2.weight = torch.nn.Parameter(m.linear2.weight.data * scale) 
+                if m.linear1.bias is not None:
+                    init.zeros_(m.linear1.bias)
+                if m.linear2.bias is not None:
+                    init.zeros_(m.linear2.bias)
 
     def get_mask(self, size):
         return torch.triu(torch.ones(size, size) * float('-inf'), diagonal=1)
@@ -67,15 +100,15 @@ class TransformerModel(nn.Module):
         last_step_output = transformer_output[:, -1, :]  # Take the last timestep (batch_size, d_model)
 
         output = self.output_layer(last_step_output)  # (batch_size, output_dim)
-        # Print the output range for debugging
-        print(f'Output range: {output.min().item()} to {output.max().item()}')
+        # # Print the output range for debugging
+        # print(f'Output range: {output.min().item()} to {output.max().item()}')
 
         return output.unsqueeze(1)
 
     def eval_valid(self, X_val, y_val, batch_size, device='cpu'):
         self.eval()
         val_loss = 0
-        crit = nn.MSELoss()
+        crit = nn.HuberLoss(delta=5.0)
         N = X_val.shape[0]
         num_batches =(N + batch_size - 1) // batch_size
         with torch.no_grad():
@@ -101,7 +134,7 @@ class TransformerModel(nn.Module):
 
         return output
 
-    def train_model(self, X_train, y_train, X_val, y_val, num_epochs=10, lr=5e-3 , batch_size=128, device='cpu'):
+    def train_model(self, X_train, y_train, X_val, y_val, num_epochs=100, lr=5e-3 , batch_size=128, device='cpu'):
         self.to(device)
         crit = nn.HuberLoss(delta=5.0) #nn.MSELoss()
         optimizer = optim.Adam(self.parameters(), lr=lr)
@@ -135,18 +168,28 @@ class TransformerModel(nn.Module):
             avg_val_loss = self.eval_valid(X_val, y_val, batch_size) 
             train_errors.append(avg_loss)
             val_errors.append(avg_val_loss)
-            print(f"Epoch {e+1}/{num_epochs}, Loss: {avg_loss:.4f}, Validation loss: {avg_val_loss}")
+            # print(f"Epoch {e+1}/{num_epochs}, Loss: {avg_loss:.4f}, Validation loss: {avg_val_loss}")
             # for name, param in self.named_parameters():
             #     if param.grad is not None:
             #         print(f"{name}: {param.grad.abs().mean().item()}")
+        plt.figure()
+        plt.plot(train_errors[2:], label="Train")
+        plt.plot(val_errors[2:], label="Validation")
+        plt.xlabel("Epochs")
+        plt.ylabel("Huber Loss")
+        plt.title("Train/Val Loss")
+        plt.legend()
+        plt.show()
         return train_errors, val_errors
 
 
 
 class Transformer(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
-                input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout):
-        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler)
+                input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
+                dropout, quantized, scale, num_epochs):
+        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized)
+        self.num_epochs = num_epochs
         self.valid_pred = {}
         self.train_pred = {}
         self.valid_pred = {}
@@ -161,8 +204,8 @@ class Transformer(BaseClass):
         for t in self.tickers:
             self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
             self.models[t] = {}
-            self.models[t]['mp'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout)
-            self.models[t]['mn'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout)
+            self.models[t]['mp'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
+            self.models[t]['mn'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
             self.train_pred[t] = {}
             self.valid_pred[t] = {}
             self.test_pred[t] = {}
@@ -187,9 +230,11 @@ class Transformer(BaseClass):
             X_valid1 = torch.tensor(self.X_valid[t][:,:,1][..., np.newaxis],dtype=torch.float32)
             y_valid1 = torch.tensor(self.y_valid[t][:,1][..., np.newaxis, np.newaxis], dtype=torch.float32)
 
-            self.train_errors[t]['mp'], self.valid_errors[t]['mp'] = self.models[t]['mp'].train_model(X_train0, y_train0, X_valid0, y_valid0)
+            print(f"Xtrain shape: {X_train0.shape}")
 
-            self.train_errors[t]['mn'], self.valid_errors[t]['mn'] = self.models[t]['mn'].train_model(X_train1, y_train1,X_valid1, y_valid1)
+            self.train_errors[t]['mp'], self.valid_errors[t]['mp'] = self.models[t]['mp'].train_model(X_train=X_train0, y_train=y_train0, X_val=X_valid0, y_val=y_valid0, num_epochs = self.num_epochs)
+
+            self.train_errors[t]['mn'], self.valid_errors[t]['mn'] = self.models[t]['mn'].train_model(X_train=X_train1, y_train=y_train1, X_val=X_valid1, y_val=y_valid1,num_epochs = self.num_epochs)
 
             # predict train and valid?
 
@@ -203,15 +248,61 @@ class Transformer(BaseClass):
             X_valid1 = torch.tensor(self.X_valid[t][:,:,1][..., np.newaxis],dtype=torch.float32)
             X_test1 = torch.tensor(self.X_test[t][:,:,1][..., np.newaxis],dtype=torch.float32)
             y_test1 = torch.tensor(self.y_test[t][:,1][..., np.newaxis, np.newaxis],dtype=torch.float32)
+            
+            self.test_pred[t] = {}
+            self.test_pred[t]['mp'] = self.models[t]['mp'].predict(X_test0)
+            self.test_pred[t]['mn'] = self.models[t]['mn'].predict(X_test1)
 
-            self.test_pred['mp'] = self.models[t]['mp'].predict(X_test0)
-            self.test_pred['mn'] = self.models[t]['mn'].predict(X_test1)
+            self.train_pred[t] = {}
+            self.train_pred[t]['mp'] = self.models[t]['mp'].predict(X_train0)
+            self.train_pred[t]['mn'] = self.models[t]['mn'].predict(X_train1)
+            
+            self.valid_pred[t] = {}
+            self.valid_pred[t]['mp'] = self.models[t]['mp'].predict(X_valid0)
+            self.valid_pred[t]['mn'] = self.models[t]['mn'].predict(X_valid1)
+    
+    def plot_predictions(self,t,  title):
+        num_samples_train = self.X_train[t].shape[0]
+        num_samples_valid = self.X_valid[t].shape[0]
+        num_samples_test = self.X_test[t].shape[0]
 
-            self.train_pred['mp'] = self.models[t]['mp'].predict(X_train0)
-            self.train_pred['mn'] = self.models[t]['mn'].predict(X_train1)
+        fig, axes = plt.subplots(3, 2, figsize=(10, 10))  # 3 rows, 2 columns
+        fig.suptitle(f"{t} ({title})", fontsize=16)
+            
+        axes[0,0].plot(self.train_pred[t]['mp'].reshape(num_samples_train).detach().numpy(), label="Predictions")
+        axes[0,0].plot(self.y_train[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,0].set_title(f"mp Train Predictions vs Truth")
+        axes[0,0].legend()
 
-            self.valid_pred['mp'] = self.models[t]['mp'].predict(X_valid0)
-            self.valid_pred['mn'] = self.models[t]['mn'].predict(X_valid1)
+        axes[0,1].plot(self.train_pred[t]['mn'].reshape(num_samples_train).detach().numpy(), label="Predictions")
+        axes[0,1].plot(self.y_train[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,1].set_title(f"mn Train Predictions vs Truth")
+        axes[0,1].legend()
+
+        axes[1,0].plot(self.valid_pred[t]['mp'].reshape(num_samples_valid).detach().numpy(), label="Predictions")
+        axes[1,0].plot(self.y_valid[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,0].set_title(f"mp Validation Predictions vs Truth")
+        axes[1,0].legend()
+
+        axes[1,1].plot(self.valid_pred[t]['mn'].reshape(num_samples_valid).detach().numpy(), label="Predictions")
+        axes[1,1].plot(self.y_valid[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,1].set_title(f"mn Validation Predictions vs Truth")
+        axes[1,1].legend()
+
+        axes[2,0].plot(self.test_pred[t]['mp'].reshape(num_samples_test).detach().numpy(), label="Predictions")
+        axes[2,0].plot(self.y_test[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,0].set_title(f"mp Test Predictions vs Truth")
+        axes[2,0].legend()
+
+        axes[2,1].plot(self.test_pred[t]['mn'].reshape(num_samples_test).detach().numpy(), label="Predictions")
+        axes[2,1].plot(self.y_test[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,1].set_title(f"mn Test Predictions vs Truth")
+        axes[2,1].legend()
+
+        plt.tight_layout()  # Adjust layout for better spacing
+        plt.show()
+
+
             
 
 
