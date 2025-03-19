@@ -7,9 +7,6 @@ from BaseEnv import BaseClass
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-"""
-Encodes position of the input, other wise transfomer views all inputs the same
-"""
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -34,6 +31,23 @@ class CauchyLoss(nn.Module):
         # Cauchy loss formula: log(1 + (x/scale)^2)
         loss = torch.log(1 + (diff / self.scale) ** 2)
         return loss.mean()
+
+
+# Input: pred so f shape Bx 1 x4 out put is scalar, assume first two 
+# the four dims of output are q1_x, q2_x, q1_y, q2_y
+class QuantileLoss(nn.Module):
+    def __init__(self, quantiles=(0.1, 0.9)):
+        super().__init__()
+        self.quantiles = torch.tensor(quantiles)
+
+    def forward(self, y_pred, y_true):
+        y_pred = y_pred.view(y_true.shape[0], 2, -1)  # Now shape: (Batch size, 2, 2)
+        y_true = y_true.unsqueeze(-1)  # Shape: (batch_size, 2, 1)
+
+        errors = y_true - y_pred  # Shape: (batch_size, 2, num_quantiles)
+        loss = torch.max(self.quantiles * errors, (self.quantiles - 1) * errors)
+
+        return loss.mean() 
 
 class TransformerModel(nn.Module):
     def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale):
@@ -96,7 +110,6 @@ class TransformerModel(nn.Module):
         src = self.positional_encoding(src)
 
         transformer_output = self.transformer.encoder(src)  # (batch_size, seq_len, d_model)
-
         last_step_output = transformer_output[:, -1, :]  # Take the last timestep (batch_size, d_model)
 
         output = self.output_layer(last_step_output)  # (batch_size, output_dim)
@@ -108,7 +121,8 @@ class TransformerModel(nn.Module):
     def eval_valid(self, X_val, y_val, batch_size, device='cpu'):
         self.eval()
         val_loss = 0
-        crit = nn.HuberLoss(delta=5.0)
+        # crit = nn.HuberLoss(delta=5.0)
+        crit = QuantileLoss()
         N = X_val.shape[0]
         num_batches =(N + batch_size - 1) // batch_size
         with torch.no_grad():
@@ -136,7 +150,8 @@ class TransformerModel(nn.Module):
 
     def train_model(self, X_train, y_train, X_val, y_val, num_epochs=100, lr=5e-3 , batch_size=128, device='cpu'):
         self.to(device)
-        crit = nn.HuberLoss(delta=5.0) #nn.MSELoss()
+        # crit = nn.HuberLoss(delta=5.0) #nn.MSELoss()
+        crit = QuantileLoss()
         optimizer = optim.Adam(self.parameters(), lr=lr)
 
         N = X_train.shape[0]
@@ -169,9 +184,9 @@ class TransformerModel(nn.Module):
             train_errors.append(avg_loss)
             val_errors.append(avg_val_loss)
             # print(f"Epoch {e+1}/{num_epochs}, Loss: {avg_loss:.4f}, Validation loss: {avg_val_loss}")
-            # for name, param in self.named_parameters():
-            #     if param.grad is not None:
-            #         print(f"{name}: {param.grad.abs().mean().item()}")
+        # for name, param in self.named_parameters():
+        #     if param.grad is not None:
+        #         print(f"{name}: {param.grad.abs().mean().item()}")
         plt.figure()
         plt.plot(train_errors[2:], label="Train")
         plt.plot(val_errors[2:], label="Validation")
@@ -187,8 +202,8 @@ class TransformerModel(nn.Module):
 class Transformer(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
                 input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
-                dropout, quantized, scale, num_epochs):
-        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized)
+                dropout, quantized, n_clusters, scale, num_epochs):
+        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized, nclusters=n_clusters)
         self.num_epochs = num_epochs
         self.valid_pred = {}
         self.train_pred = {}
@@ -302,6 +317,179 @@ class Transformer(BaseClass):
         plt.tight_layout()  # Adjust layout for better spacing
         plt.show()
 
+
+
+
+class Transformer2D(BaseClass):
+    def __init__(self, tickers, feature_steps, target_steps, scaler,
+                input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
+                dropout, quantized,n_clusters, scale, num_epochs):
+        super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized, nclusters=n_clusters)
+        self.num_epochs = num_epochs
+        self.valid_pred = {}
+        self.train_pred = {}
+        self.valid_pred = {}
+        self.test_pred = {}
+        self.train_errors = {}
+        self.valid_errors = {}
+        self.test_errors = {}
+        self.test_dates = {}
+        self.history = {}
+        self.models = {}
+        self.train_series = {}
+        for t in self.tickers:
+            self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
+            self.models[t] = {}
+            self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
+            self.train_pred[t] = {}
+            self.valid_pred[t] = {}
+            self.test_pred[t] = {}
+            self.train_errors[t] = {}
+            self.valid_errors[t] = {}
+            self.test_errors[t] = {}
+            self.test_dates[t] = {}
+            self.history[t] = {}
+
+    def train(self):
+        for t in self.tickers:
+            X_train = torch.tensor(self.X_train[t], dtype=torch.float32)
+            y_train = torch.tensor(self.y_train[t], dtype=torch.float32)
+            X_valid = torch.tensor(self.X_valid[t], dtype=torch.float32)
+            y_valid = torch.tensor(self.y_valid[t], dtype=torch.float32)
+
+            y_train = y_train.unsqueeze(1)
+            y_valid = y_valid.unsqueeze(1)
+
+            self.train_errors[t], self.valid_errors[t] = self.models[t].train_model(X_train=X_train, y_train=y_train, X_val=X_valid, y_val=y_valid, num_epochs = self.num_epochs)
+            print(f"Final Train loss : {self.train_errors[t][-1]} final Val loss: {self.valid_errors[t][-1]}")
+
+    def predict(self):
+        for t in self.tickers:
+            X_test = torch.tensor(self.X_test[t],dtype=torch.float32)
+            X_train = torch.tensor(self.X_train[t], dtype=torch.float32)
+            X_valid = torch.tensor(self.X_valid[t], dtype=torch.float32)
+
+            self.test_pred[t] = self.models[t].predict(X_test)
+
+            self.train_pred[t] = self.models[t].predict(X_train)
+
+            self.valid_pred[t] = self.models[t].predict(X_valid)
+    
+    def plot_predictions(self,t,  title):
+        num_samples_train = self.X_train[t].shape[0]
+        num_samples_valid = self.X_valid[t].shape[0]
+        num_samples_test = self.X_test[t].shape[0]
+
+        bn_train = self.train_pred[t][:,:,0].reshape(num_samples_train).detach().numpy()
+        bp_train = self.train_pred[t][:,:,1].reshape(num_samples_train).detach().numpy()
+
+        bn_valid = self.valid_pred[t][:,:,0].reshape(num_samples_valid).detach().numpy()
+        bp_valid = self.valid_pred[t][:,:,1].reshape(num_samples_valid).detach().numpy()
+
+        bn_test = self.test_pred[t][:,:,0].reshape(num_samples_test).detach().numpy()
+        bp_test = self.test_pred[t][:,:,1].reshape(num_samples_test).detach().numpy()
+
+        fig, axes = plt.subplots(3, 2, figsize=(10, 10))  # 3 rows, 2 columns
+        fig.suptitle(f"{t} ({title})", fontsize=16)
+            
+        axes[0,0].plot(bp_train, label="Predictions")
+        axes[0,0].plot(self.y_train[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,0].set_title(f"mp Train Predictions vs Truth")
+        axes[0,0].legend()
+
+        axes[0,1].plot(bn_train, label="Predictions")
+        axes[0,1].plot(self.y_train[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,1].set_title(f"mn Train Predictions vs Truth")
+        axes[0,1].legend()
+
+        axes[1,0].plot(bp_valid, label="Predictions")
+        axes[1,0].plot(self.y_valid[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,0].set_title(f"mp Validation Predictions vs Truth")
+        axes[1,0].legend()
+
+        axes[1,1].plot(bn_valid, label="Predictions")
+        axes[1,1].plot(self.y_valid[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,1].set_title(f"mn Validation Predictions vs Truth")
+        axes[1,1].legend()
+
+        axes[2,0].plot(bp_test, label="Predictions")
+        axes[2,0].plot(self.y_test[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,0].set_title(f"mp Test Predictions vs Truth")
+        axes[2,0].legend()
+
+        axes[2,1].plot(bn_test, label="Predictions")
+        axes[2,1].plot(self.y_test[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,1].set_title(f"mn Test Predictions vs Truth")
+        axes[2,1].legend()
+
+        plt.tight_layout()  # Adjust layout for better spacing
+        plt.show()
+
+    def plot_quantile_predicitons(self, t, title):
+        num_samples_train = self.X_train[t].shape[0]
+        num_samples_valid = self.X_valid[t].shape[0]
+        num_samples_test = self.X_test[t].shape[0]
+        print(f"Train preds shape : {self.train_pred[t].shape}")
+
+        bn_train_q1 = self.train_pred[t][:,:,0].reshape(num_samples_train).detach().numpy()
+        bn_train_q2 = self.train_pred[t][:,:,1].reshape(num_samples_train).detach().numpy()
+        bp_train_q1 = self.train_pred[t][:,:,2].reshape(num_samples_train).detach().numpy()
+        bp_train_q2 = self.train_pred[t][:,:,3].reshape(num_samples_train).detach().numpy()
+
+        bn_valid_q1 = self.valid_pred[t][:,:,0].reshape(num_samples_valid).detach().numpy()
+        bn_valid_q2 = self.valid_pred[t][:,:,1].reshape(num_samples_valid).detach().numpy()
+        bp_valid_q1 = self.valid_pred[t][:,:,2].reshape(num_samples_valid).detach().numpy()
+        bp_valid_q2 = self.valid_pred[t][:,:,3].reshape(num_samples_valid).detach().numpy()
+
+        bn_test_q1 = self.test_pred[t][:,:,0].reshape(num_samples_test).detach().numpy()
+        bn_test_q2 = self.test_pred[t][:,:,1].reshape(num_samples_test).detach().numpy()
+        bp_test_q1 = self.test_pred[t][:,:,2].reshape(num_samples_test).detach().numpy()
+        bp_test_q2 = self.test_pred[t][:,:,3].reshape(num_samples_test).detach().numpy()
+
+        fig, axes = plt.subplots(3, 2, figsize=(10, 10))  # 3 rows, 2 columns
+        fig.suptitle(f"{t} ({title})", fontsize=16)
+            
+        axes[0,0].plot(bp_train_q1, linestyle='--', label="10% q pred")
+        axes[0,0].plot(bp_train_q2, linestyle='--', label="90% q pred")
+        axes[0,0].plot(self.y_train[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,0].set_title(f"mp Train Predictions vs Truth")
+        axes[0,0].legend()
+
+        axes[0,1].plot(bn_train_q1, linestyle='--', label="10% q pred")
+        axes[0,1].plot(bn_train_q2, linestyle='--', label="90% q pred")
+        axes[0,1].plot(self.y_train[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
+        axes[0,1].set_title(f"mn Train Predictions vs Truth")
+        axes[0,1].legend()
+
+        axes[1,0].plot(bp_valid_q1, linestyle='--', label="10% q pred")
+        axes[1,0].plot(bp_valid_q2, linestyle='--', label="90% q pred")
+        axes[1,0].plot(self.y_valid[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,0].set_title(f"mp Validation Predictions vs Truth")
+        axes[1,0].legend()
+
+        axes[1,1].plot(bn_valid_q1, linestyle='--', label="10% q pred")
+        axes[1,1].plot(bn_valid_q2, linestyle='--', label="90% q pred")
+        axes[1,1].plot(self.y_valid[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
+        axes[1,1].set_title(f"mn Validation Predictions vs Truth")
+        axes[1,1].legend()
+
+        axes[2,0].plot(bp_test_q1, linestyle='--', label="10% q pred")
+        axes[2,0].plot(bp_test_q2, linestyle='--', label="90% q pred")
+        axes[2,0].plot(self.y_test[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,0].set_title(f"mp Test Predictions vs Truth")
+        axes[2,0].legend()
+
+        axes[2,1].plot(bn_test_q1, linestyle='--', label="10% q pred")
+        axes[2,1].plot(bn_test_q2, linestyle='--', label="90% q pred")
+        axes[2,1].plot(self.y_test[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
+        axes[2,1].set_title(f"mn Test Predictions vs Truth")
+        axes[2,1].legend()
+
+        plt.tight_layout()  # Adjust layout for better spacing
+        plt.show()
+
+
+        return
 
             
 
