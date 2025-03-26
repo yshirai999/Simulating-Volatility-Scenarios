@@ -35,22 +35,38 @@ class CauchyLoss(nn.Module):
 
 # Input: pred so f shape Bx 1 x4 out put is scalar, assume first two 
 # the four dims of output are q1_x, q2_x, q1_y, q2_y
+# class QuantileLoss(nn.Module):
+#     def __init__(self, quantiles=(0.1, 0.9)):
+#         super().__init__()
+#         self.quantiles = torch.tensor(quantiles)
+
+#     def forward(self, y_pred, y_true):
+#         y_pred = y_pred.view(y_true.shape[0], 2, -1)  # Now shape: (Batch size, 2, 2)
+#         y_true = y_true.unsqueeze(-1)  # Shape: (batch_size, 2, 1)
+
+#         errors = y_true - y_pred  # Shape: (batch_size, 2, num_quantiles)
+#         loss = torch.max(self.quantiles * errors, (self.quantiles - 1) * errors)
+
+#         return loss.mean() 
 class QuantileLoss(nn.Module):
     def __init__(self, quantiles=(0.1, 0.9)):
         super().__init__()
-        self.quantiles = torch.tensor(quantiles)
+        self.register_buffer('quantiles', torch.tensor(quantiles))  # Register quantiles as a buffer
 
     def forward(self, y_pred, y_true):
+        # Ensure quantiles are on the same device as y_pred
+        quantiles = self.quantiles.to(y_pred.device)
+
         y_pred = y_pred.view(y_true.shape[0], 2, -1)  # Now shape: (Batch size, 2, 2)
         y_true = y_true.unsqueeze(-1)  # Shape: (batch_size, 2, 1)
 
         errors = y_true - y_pred  # Shape: (batch_size, 2, num_quantiles)
-        loss = torch.max(self.quantiles * errors, (self.quantiles - 1) * errors)
+        loss = torch.max(quantiles * errors, (quantiles - 1) * errors)
 
-        return loss.mean() 
+        return loss.mean()
 
 class TransformerModel(nn.Module):
-    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=(0.1, 0.9), device='cpu'):
         super(TransformerModel, self).__init__()
         
         self.embedding = nn.Linear(input_dim, d_model) # encode the input
@@ -69,6 +85,8 @@ class TransformerModel(nn.Module):
         )
         self.output_layer = nn.Linear(d_model, output_dim)
         self._init_weights(scale)
+        self.quantiles = quantiles    
+        self.device = device
     
     def _init_weights(self, scale=2.0):
         for m in self.modules():
@@ -118,17 +136,17 @@ class TransformerModel(nn.Module):
 
         return output.unsqueeze(1)
 
-    def eval_valid(self, X_val, y_val, batch_size, device='cpu'):
+    def eval_valid(self, X_val, y_val, batch_size):
         self.eval()
         val_loss = 0
         # crit = nn.HuberLoss(delta=5.0)
-        crit = QuantileLoss()
+        crit = QuantileLoss(quantiles=self.quantiles)
         N = X_val.shape[0]
         num_batches =(N + batch_size - 1) // batch_size
         with torch.no_grad():
             for i in range(0, N, batch_size):
-                input = X_val[i:i+batch_size].to(device)
-                labels = y_val[i:i+batch_size].to(device)
+                input = X_val[i:i+batch_size].to(self.device)
+                labels = y_val[i:i+batch_size].to(self.device)
 
                 output = self.forward(input)
                 loss = crit(output, labels)
@@ -139,19 +157,19 @@ class TransformerModel(nn.Module):
 
         
 
-    def predict(self, X, batch_size = 128, max_len=2000, device='cpu'):
+    def predict(self, X, batch_size = 128, max_len=2000):
         self.eval()  # Set model to evaluation mode
         with torch.no_grad():  # No gradients needed for inference
             # Get the output using the forward method
-            X = X.to(device)
+            X = X.to(self.device)
             output = self.forward(X)  # (batch_size, 1, output_dim)
 
         return output
 
-    def train_model(self, X_train, y_train, X_val, y_val, num_epochs=100, lr=5e-3 , batch_size=128, device='cpu'):
-        self.to(device)
+    def train_model(self, X_train, y_train, X_val, y_val, num_epochs=100, lr=5e-3 , batch_size=128):
+        self.to(self.device)
         # crit = nn.HuberLoss(delta=5.0) #nn.MSELoss()
-        crit = QuantileLoss()
+        crit = QuantileLoss(self.quantiles)
         optimizer = optim.Adam(self.parameters(), lr=lr)
 
         N = X_train.shape[0]
@@ -167,8 +185,8 @@ class TransformerModel(nn.Module):
             indices = torch.randperm(N)
             X_train, y_train = X_train[indices], y_train[indices]
             for i in range(0, N, batch_size):
-                input = X_train[i:i+batch_size].to(device)
-                labels = y_train[i:i+batch_size].to(device)
+                input = X_train[i:i+batch_size].to(self.device)
+                labels = y_train[i:i+batch_size].to(self.device)
 
                 output = self.forward(input)
                 loss = crit(output, labels)
@@ -202,7 +220,7 @@ class TransformerModel(nn.Module):
 class Transformer(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
                 input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
-                dropout, quantized, n_clusters, scale, num_epochs):
+                dropout, quantized, n_clusters, scale, num_epochs, device='cpu'):
         super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized, nclusters=n_clusters)
         self.num_epochs = num_epochs
         self.valid_pred = {}
@@ -219,8 +237,8 @@ class Transformer(BaseClass):
         for t in self.tickers:
             self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
             self.models[t] = {}
-            self.models[t]['mp'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
-            self.models[t]['mn'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
+            self.models[t]['mp'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, device = device)
+            self.models[t]['mn'] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, device = device)
             self.train_pred[t] = {}
             self.valid_pred[t] = {}
             self.test_pred[t] = {}
@@ -323,7 +341,7 @@ class Transformer(BaseClass):
 class Transformer2D(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
                 input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
-                dropout, quantized,n_clusters, scale, num_epochs):
+                dropout, quantized,n_clusters, scale, num_epochs, quantiles=(0.1,0.9), device='cpu'):
         super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized, nclusters=n_clusters)
         self.num_epochs = num_epochs
         self.valid_pred = {}
@@ -337,10 +355,12 @@ class Transformer2D(BaseClass):
         self.history = {}
         self.models = {}
         self.train_series = {}
+        self.quantiles = quantiles
+        self.device = device
         for t in self.tickers:
             self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
             self.models[t] = {}
-            self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale)
+            self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
             self.train_pred[t] = {}
             self.valid_pred[t] = {}
             self.test_pred[t] = {}
@@ -430,6 +450,10 @@ class Transformer2D(BaseClass):
         num_samples_valid = self.X_valid[t].shape[0]
         num_samples_test = self.X_test[t].shape[0]
         print(f"Train preds shape : {self.train_pred[t].shape}")
+        if self.device == 'cuda':
+            self.train_pred[t] = self.train_pred[t].cpu()
+            self.valid_pred[t] = self.valid_pred[t].cpu()
+            self.test_pred[t] = self.test_pred[t].cpu()
 
         bn_train_q1 = self.train_pred[t][:,:,0].reshape(num_samples_train).detach().numpy()
         bn_train_q2 = self.train_pred[t][:,:,1].reshape(num_samples_train).detach().numpy()
@@ -448,39 +472,41 @@ class Transformer2D(BaseClass):
 
         fig, axes = plt.subplots(3, 2, figsize=(10, 10))  # 3 rows, 2 columns
         fig.suptitle(f"{t} ({title})", fontsize=16)
-            
-        axes[0,0].plot(bp_train_q1, linestyle='--', label="10% q pred")
-        axes[0,0].plot(bp_train_q2, linestyle='--', label="90% q pred")
+        
+        lq = self.quantiles[0]
+        uq = self.quantiles[1]
+        axes[0,0].plot(bp_train_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[0,0].plot(bp_train_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[0,0].plot(self.y_train[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
         axes[0,0].set_title(f"mp Train Predictions vs Truth")
         axes[0,0].legend()
 
-        axes[0,1].plot(bn_train_q1, linestyle='--', label="10% q pred")
-        axes[0,1].plot(bn_train_q2, linestyle='--', label="90% q pred")
+        axes[0,1].plot(bn_train_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[0,1].plot(bn_train_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[0,1].plot(self.y_train[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_train), label="True")
         axes[0,1].set_title(f"mn Train Predictions vs Truth")
         axes[0,1].legend()
 
-        axes[1,0].plot(bp_valid_q1, linestyle='--', label="10% q pred")
-        axes[1,0].plot(bp_valid_q2, linestyle='--', label="90% q pred")
+        axes[1,0].plot(bp_valid_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[1,0].plot(bp_valid_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[1,0].plot(self.y_valid[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
         axes[1,0].set_title(f"mp Validation Predictions vs Truth")
         axes[1,0].legend()
 
-        axes[1,1].plot(bn_valid_q1, linestyle='--', label="10% q pred")
-        axes[1,1].plot(bn_valid_q2, linestyle='--', label="90% q pred")
+        axes[1,1].plot(bn_valid_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[1,1].plot(bn_valid_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[1,1].plot(self.y_valid[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_valid), label="True")
         axes[1,1].set_title(f"mn Validation Predictions vs Truth")
         axes[1,1].legend()
 
-        axes[2,0].plot(bp_test_q1, linestyle='--', label="10% q pred")
-        axes[2,0].plot(bp_test_q2, linestyle='--', label="90% q pred")
+        axes[2,0].plot(bp_test_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[2,0].plot(bp_test_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[2,0].plot(self.y_test[t][:,0][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
         axes[2,0].set_title(f"mp Test Predictions vs Truth")
         axes[2,0].legend()
 
-        axes[2,1].plot(bn_test_q1, linestyle='--', label="10% q pred")
-        axes[2,1].plot(bn_test_q2, linestyle='--', label="90% q pred")
+        axes[2,1].plot(bn_test_q1, linestyle='--', label=f"{lq*100}% q pred")
+        axes[2,1].plot(bn_test_q2, linestyle='--', label=f"{uq*100}% q pred")
         axes[2,1].plot(self.y_test[t][:,1][..., np.newaxis, np.newaxis].reshape(num_samples_test), label="True")
         axes[2,1].set_title(f"mn Test Predictions vs Truth")
         axes[2,1].legend()
