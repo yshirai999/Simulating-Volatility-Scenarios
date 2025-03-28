@@ -48,5 +48,6 @@
           - Then, we simply buy what is in positive signal state, and sell the negative ones
           - We can do this every T days, where T is the expected time it takes for the majority of signals to switch sign
           - The amount traded could be fixed for now, but we can also optimize it introducing a rebate
+      - Alternative, we could think of using this for hedging optimally
 
 - If needed, we can then use Manifold learning to understand the intracluster noise geometry
