@@ -3,6 +3,7 @@ import tensorflow as tf
 import pandas as pd
 from tensorflow.keras.layers import SimpleRNN, LSTM, Dense, Dropout, TimeDistributed, BatchNormalization
 from tensorflow.keras.models import Sequential
+from tensorflow.keras import initializers
 from tensorflow.keras import optimizers
 from keras.losses import Huber, MeanSquaredError, MeanAbsoluteError, MeanSquaredLogarithmicError, CosineSimilarity
 from sklearn.metrics import mean_squared_error
@@ -145,12 +146,18 @@ class RNNClass(BaseClass):
         model = Sequential()
         
         for i in range(layers):
-            model.add(SimpleRNN(units=64, activation='relu', input_shape=input_shape, return_sequences=True))
+            model.add(SimpleRNN(units=64, activation='relu', 
+                                kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                                bias_initializer=initializers.Zeros(),
+                                input_shape=input_shape, return_sequences=True))
             model.add(Dropout(0.2))        
 
             model.add(TimeDistributed(Dense(units=32, activation='relu')))
 
-        model.add(SimpleRNN(units=64, activation='relu', return_sequences=False))
+        model.add(SimpleRNN(units=64, activation='relu',
+                            kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                            bias_initializer=initializers.Zeros(),
+                            return_sequences=False))
         model.add(Dropout(0.2))
         
         model.add(Dense(units=64, activation='relu'))
@@ -171,7 +178,10 @@ class RNNClass(BaseClass):
         model = Sequential()
 
         for i in range(layers):
-            model.add(LSTM(units=64, input_shape=input_shape, return_sequences=True))
+            model.add(LSTM(units=64,
+                        kernel_initializer=initializers.RandomNormal(stddev=0.01),
+                        bias_initializer=initializers.Zeros(),
+                        input_shape=input_shape, return_sequences=True))
             model.add(Dropout(0.2))
         
         model.add(LSTM(units=64, return_sequences=False))
