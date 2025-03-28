@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List
-import keras.backend as K
+from tensorflow.keras import backend as K
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import os
