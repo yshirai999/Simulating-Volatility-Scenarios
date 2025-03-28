@@ -22,16 +22,20 @@
 
 - The classes in the python files data.py and BaseEnv.py read and process the data in the BGP.mat file
 
-- The RegressionClass and RNNClarr inherit the properties and methods of the BaseClass, which in turn inherits from the dataclass
+- The Transformer and Linear classes in Transformer.py and Linear.py inherit the properties and methods of the BaseClass, which in turn inherits from the dataclass
 
-- The models in the RegressionClass currently supported are Linear Regression and Huber Regression
+- The Transformer class creates an instance of the Transformer2D class, which implements a neural network with encoder-decoder layers and the self-attention mechanism
 
-- Those in the RNNClass are SimpleRNN and LSTM
-
-- The number of recurrent layers can be specified at the time an instance of the respective classes is constructed
+- The Linear class creates an instance of the Linear2D class, which implements a neural network with a single layer with no activation function
 
 ## Outputs
 
-- Illustrative examples for RNN and Regression are in the juptyer notebooks RNN.ipynb and Regression.ipynb
+- Illustrative examples are in the juptyer notebooks Linear.ipynb and Transformer.ipynb
 
-- Data may also be visualized in the DataPlots.ipynb notebook.
+## Next steps
+
+- Try predicting the probabilities of each cluster for a small number (say 10 or 20) clusters created looking at the whole set of assets
+
+- This should be done for all the four parameters.
+
+- Within each scenario we can then think of using Manifold learning to understand the intracluster noise geometry
