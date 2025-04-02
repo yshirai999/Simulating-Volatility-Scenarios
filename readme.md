@@ -52,4 +52,4 @@
 - The amount traded could be fixed for now, but we can also optimize it introducing a rebate
 
 - Alternative, we could think of using this for hedging optimally
-- If needed, we can then use Manifold learning to understand the intracluster noise geometry
+- If needed, we can then use Manifold learning to understand the intracluster noise geometry: Diffusion nets
