@@ -55,8 +55,8 @@ class dataclass:
                 for t in range(T):
                     Data1.append(d[t])
         datarray = np.array(Data1)
-        print(f"dataarray shape {datarray.shape}")
-        if (quant_all):
+
+        if (quant_all): # NEW: quantization that does 1d across all assets for each variable
             AllQuantCenters = dict()
             for i in range(4):
                 d = datarray[:,i].reshape(-1, 1)
@@ -81,16 +81,3 @@ class dataclass:
                 
         plt.plot(BGPquant[1]["parms"]['aapl'][1,:])
         return BGPquant
-
-    # plan: change the above code to add a option to quantize everything
-    # in base Env take that param too, if that param is true, BGPquant will have a special key that
-    # stores this info in there, can use the method below as a helper for when we need to do it
-    # then everything is the same
-
-    # write the code that quanitzes everything, should be similar to the above but take 1 x-axis and perofrm over all the data
-
-    def get_dataset_quntized(self, n_clusters=10):
-        return -1
-        
-
-        # return the data frameor the DICt for all?
