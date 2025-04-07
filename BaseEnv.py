@@ -13,6 +13,7 @@ class BaseClass(dataclass):
     feature_steps: int = 10,
     target_steps: int = 1,
     quantized: bool = True,
+    quant_all:bool = False,
     nclusters: int = 525,
     scaler = StandardScaler
     ):
@@ -22,7 +23,7 @@ class BaseClass(dataclass):
         self.dates = dict()
         self.df = dict()
         if quantized:
-            self.BGPquant = self.quantization(nclusters)
+            self.BGPquant = self.quantization(nclusters, quant_all=quant_all)
         for t in self.tickers:
             loc = self.tickersloc[t]
             if quantized:

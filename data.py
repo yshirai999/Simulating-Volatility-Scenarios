@@ -43,7 +43,7 @@ class dataclass:
                 count += 1
         self.BGPquant = dict()
         
-    def quantization(self, n_clusters: int = 525) -> dict:
+    def quantization(self, n_clusters: int = 525, quant_all=False) -> dict:
         Data1 = list()
         count = self.count
         for j in range(1,count+1):
@@ -55,6 +55,15 @@ class dataclass:
                 for t in range(T):
                     Data1.append(d[t])
         datarray = np.array(Data1)
+        print(f"dataarray shape {datarray.shape}")
+        if (quant_all):
+            AllQuantCenters = dict()
+            for i in range(4):
+                d = datarray[:,i].reshape(-1, 1)
+                kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(d)
+                AllQuantCenters[i] =  np.sort(kmeans.cluster_centers_.flatten())
+            print(AllQuantCenters)
+            return AllQuantCenters
 
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
         self.labels = self.kmeans.labels_
@@ -69,5 +78,19 @@ class dataclass:
                 d = Data[k][[1,3]].T
                 quantized = self.centers[self.kmeans.predict(d)]
                 BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[1,3],:] = quantized.T
+                
         plt.plot(BGPquant[1]["parms"]['aapl'][1,:])
         return BGPquant
+
+    # plan: change the above code to add a option to quantize everything
+    # in base Env take that param too, if that param is true, BGPquant will have a special key that
+    # stores this info in there, can use the method below as a helper for when we need to do it
+    # then everything is the same
+
+    # write the code that quanitzes everything, should be similar to the above but take 1 x-axis and perofrm over all the data
+
+    def get_dataset_quntized(self, n_clusters=10):
+        return -1
+        
+
+        # return the data frameor the DICt for all?

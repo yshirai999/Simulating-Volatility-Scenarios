@@ -80,6 +80,17 @@ class LinearModel(nn.Module):
         self.quantiles = quantiles
         self.device = device
 
+        self._init_weights(2)
+    def _init_weights(self, scale=2.0):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                # Initialize Linear layers with Xavier uniform distribution
+                init.xavier_uniform_(m.weight)
+                m.weight = torch.nn.Parameter(scale * m.weight.data)
+                if m.bias is not None:
+                    init.zeros_(m.bias)
+
+
     def forward(self, src):
         """
         src: (batch_size, input_dim)
