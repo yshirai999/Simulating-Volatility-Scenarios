@@ -42,6 +42,16 @@ class dataclass:
                 self.tickersloc[self.BGP[k]["ticker"][count]] = [k,count]
                 count += 1
         self.BGPquant = dict()
+
+    def print_keys(self, obj, indent=0):
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                print("  " * indent + str(key))
+                self.print_keys(value, indent + 1)
+        elif isinstance(obj, list):
+            for idx, item in enumerate(obj):
+                print("  " * indent + f"[{idx}]")
+                self.print_keys(item, indent + 1)
         
     def quantization(self, n_clusters: int = 525, quant_all=False) -> dict:
         Data1 = list()
@@ -50,34 +60,58 @@ class dataclass:
             Data = list(self.BGP[j]['parms'].values())
             K = len(Data)
             for k in range(K):
-                T = Data[k].shape[1]
-                d = Data[k][1:-1].T
+                T = Data[k].shape[1] # 3273
+                d = Data[k][1:-1].T # (3273, 4)
                 for t in range(T):
-                    Data1.append(d[t])
-        datarray = np.array(Data1)
-
+                    Data1.append(d[t]) # d[t] is size 4
+        datarray = np.array(Data1) # (601979, 4)
+        # self.print_keys(self.BGP)
+        print(datarray.shape)
+        # Data is (46 tickers , 6 variable values, 3273 samples) 
         if (quant_all): # NEW: quantization that does 1d across all assets for each variable
             AllQuantCenters = dict()
-            for i in range(4):
+            self.kmeans = {}
+            self.centers = {}
+            self.labels = {}
+            print(count)
+            for i in range(0,count):
                 d = datarray[:,i].reshape(-1, 1)
-                kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(d)
-                AllQuantCenters[i] =  np.sort(kmeans.cluster_centers_.flatten())
-            print(AllQuantCenters)
-            return AllQuantCenters
+                self.kmeans[i] = KMeans(n_clusters=n_clusters, random_state=0).fit(d)
+                self.labels[i] = self.kmeans[i].labels_
+                self.centers[i] = self.kmeans[i].cluster_centers_
+                # AllQuantCenters[i] =  np.sort(self.kmeans.cluster_centers_.flatten())
+            # print(AllQuantCenters)
+            print(f"Quantized centers cp: {list(self.centers[1].flatten())}")
+            # print(set(AllQuantCenters[0]))
+            #return AllQuantCenters
+            BGPquant = self.BGP
+            for j in range(1,count+1):
+                Data = list(self.BGP[j]['parms'].values())
+                K = len(Data)
+                for k in range(K):
+                    T = Data[k].shape[1] # for each ticker in this list
+                    # d = Data[k][[1,3]].T
+                    d1 = Data[k][1].reshape(-1, 1) # get the ts for the values we want
+                    d3 = Data[k][3].reshape(-1, 1) # get the ts for the values we want
+                    quantized1 = self.centers[1][self.kmeans[1].predict(d1)] 
+                    quantized3 = self.centers[3][self.kmeans[3].predict(d3)] 
+                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][1,:] = quantized1.T
+                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][3,:] = quantized3.T
+        else:
 
-        self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
-        self.labels = self.kmeans.labels_
-        self.centers = self.kmeans.cluster_centers_
+            self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
+            self.labels = self.kmeans.labels_
+            self.centers = self.kmeans.cluster_centers_
 
-        BGPquant = self.BGP
-        for j in range(1,count+1):
-            Data = list(self.BGP[j]['parms'].values())
-            K = len(Data)
-            for k in range(K):
-                T = Data[k].shape[1]
-                d = Data[k][[1,3]].T
-                quantized = self.centers[self.kmeans.predict(d)]
-                BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[1,3],:] = quantized.T
+            BGPquant = self.BGP
+            for j in range(1,count+1):
+                Data = list(self.BGP[j]['parms'].values())
+                K = len(Data)
+                for k in range(K):
+                    T = Data[k].shape[1] # for each ticker in this list
+                    d = Data[k][[1,3]].T # get the ts for the values we want
+                    quantized = self.centers[self.kmeans.predict(d)] # quantize those separately
+                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[1,3],:] = quantized.T
                 
         plt.plot(BGPquant[1]["parms"]['aapl'][1,:])
         return BGPquant

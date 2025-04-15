@@ -65,6 +65,9 @@ class QuantileLoss(nn.Module):
 
         return loss.mean()
 
+
+
+
 class TransformerModel(nn.Module):
     def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=(0.1, 0.9), device='cpu'):
         super(TransformerModel, self).__init__()
