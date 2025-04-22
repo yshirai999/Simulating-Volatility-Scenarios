@@ -15,7 +15,8 @@ class BaseClass(dataclass):
     quantized: bool = True,
     quant_all:bool = False,
     nclusters: int = 525,
-    scaler = StandardScaler
+    scaler = StandardScaler,
+    vars=[0,2]
     ):
         super().__init__()
         self.tickers = tickers
@@ -57,7 +58,8 @@ class BaseClass(dataclass):
 
         for t in self.tickers:
             data = self.df[t].diff().dropna()
-            self.ts[t] = data.values[:,[0,2]]
+            print(data.values.shape)
+            self.ts[t] = data.values[:,vars] # change this line
             self.scaler[t] = scaler()
             self.scaler[t].fit(self.ts[t])
             self.ts[t] = self.scaler[t].transform(self.ts[t])
@@ -72,7 +74,7 @@ class BaseClass(dataclass):
     def ts_split(self,
         ts
     ):
-
+        print(f"ts {ts.shape}")
         feature_steps = self.feature_steps
         target_steps = self.target_steps
         n_obs = len(ts) - feature_steps - target_steps + 1

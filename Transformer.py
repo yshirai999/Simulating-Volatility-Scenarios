@@ -379,6 +379,8 @@ class Transformer2D(BaseClass):
             y_train = torch.tensor(self.y_train[t], dtype=torch.float32)
             X_valid = torch.tensor(self.X_valid[t], dtype=torch.float32)
             y_valid = torch.tensor(self.y_valid[t], dtype=torch.float32)
+            print(X_train.shape)
+            print(self.X[t].shape)
 
             y_train = y_train.unsqueeze(1)
             y_valid = y_valid.unsqueeze(1)
@@ -520,7 +522,15 @@ class Transformer2D(BaseClass):
 
         return
 
-            
+
+class ProbTransformer(TransformerModel):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=(0.1, 0.9), device='cpu'):
+        super().__init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles, device)
+        self.prob_layer = nn.Softmax()
+
+    def forward(self,src):
+        out = super().forward(self, src) # output batch size, output dim
+        return self.prob_layer(out, dim=-1) # perform softmax on it     
 
 
 

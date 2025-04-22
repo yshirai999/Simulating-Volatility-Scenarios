@@ -53,7 +53,7 @@ class dataclass:
                 print("  " * indent + f"[{idx}]")
                 self.print_keys(item, indent + 1)
         
-    def quantization(self, n_clusters: int = 525, quant_all=False) -> dict:
+    def quantization(self, n_clusters: int = 525, quant_all=False, vars=[1,3]) -> dict:
         Data1 = list()
         count = self.count
         for j in range(1,count+1):
@@ -69,7 +69,6 @@ class dataclass:
         print(datarray.shape)
         # Data is (46 tickers , 6 variable values, 3273 samples) 
         if (quant_all): # NEW: quantization that does 1d across all assets for each variable
-            AllQuantCenters = dict()
             self.kmeans = {}
             self.centers = {}
             self.labels = {}
@@ -98,7 +97,7 @@ class dataclass:
                     BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][1,:] = quantized1.T
                     BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][3,:] = quantized3.T
         else:
-
+            print("in here")
             self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
             self.labels = self.kmeans.labels_
             self.centers = self.kmeans.cluster_centers_
@@ -108,10 +107,11 @@ class dataclass:
                 Data = list(self.BGP[j]['parms'].values())
                 K = len(Data)
                 for k in range(K):
+                    # I think we can just change this code here to accept which values we want to quantize
                     T = Data[k].shape[1] # for each ticker in this list
-                    d = Data[k][[1,3]].T # get the ts for the values we want
+                    d = Data[k][[0,2]].T # get the ts for the values we want
                     quantized = self.centers[self.kmeans.predict(d)] # quantize those separately
-                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[1,3],:] = quantized.T
+                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[0,2],:] = quantized.T
                 
         plt.plot(BGPquant[1]["parms"]['aapl'][1,:])
         return BGPquant
