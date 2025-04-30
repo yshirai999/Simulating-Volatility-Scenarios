@@ -53,7 +53,7 @@ class dataclass:
                 print("  " * indent + f"[{idx}]")
                 self.print_keys(item, indent + 1)
         
-    def quantization(self, n_clusters: int = 525, quant_all=False, vars=[1,3]) -> dict:
+    def quantization(self, n_clusters: int = 525, quant_all=False, vars=[0,2]) -> dict:
         Data1 = list()
         count = self.count
         for j in range(1,count+1):
@@ -97,10 +97,10 @@ class dataclass:
                     BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][1,:] = quantized1.T
                     BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][3,:] = quantized3.T
         else:
-            print("in here")
-            self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
-            self.labels = self.kmeans.labels_
-            self.centers = self.kmeans.cluster_centers_
+            print(f"in here, n_clusters is {n_clusters}")
+            # self.kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(datarray[:,[0,2]])
+            # self.labels = self.kmeans.labels_
+            # self.centers = self.kmeans.cluster_centers_
 
             BGPquant = self.BGP
             for j in range(1,count+1):
@@ -109,9 +109,38 @@ class dataclass:
                 for k in range(K):
                     # I think we can just change this code here to accept which values we want to quantize
                     T = Data[k].shape[1] # for each ticker in this list
-                    d = Data[k][[0,2]].T # get the ts for the values we want
-                    quantized = self.centers[self.kmeans.predict(d)] # quantize those separately
-                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][[0,2],:] = quantized.T
-                
-        plt.plot(BGPquant[1]["parms"]['aapl'][1,:])
+                    d = Data[k][vars].T # get the ts for the values we want
+                    # print(d.shape)
+                    model = KMeans(n_clusters=n_clusters, random_state=0).fit(d)
+                    labels = model.labels_
+                    centers = model.cluster_centers_
+                    # print(centers)
+                    quantized = centers[model.predict(d)] # quantize those separately
+                    # print(quantized.shape)
+                    # print(len(np.unique(quantized)))
+                    BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][vars,:] = quantized.T
+                    x = BGPquant[j]["parms"][self.BGP[j]["ticker"][k]][vars,:]
+                    # print(x[:5])
+                    # print(x.shape)
+                    # plt.plot(x[0], x[1])
+                    # plt.show()
+                    # print(f" after quantization {len(np.unique(x))}")
+        
+        plt.scatter(BGPquant[1]["parms"]['aapl'][0,:], BGPquant[1]["parms"]['aapl'][2,:], marker='o')
+        plt.xlabel("bp")
+        plt.ylabel("bn")
+        plt.show()
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.scatter(np.arange(len(BGPquant[1]["parms"]['aapl'][2,:])), BGPquant[1]["parms"]['aapl'][0,:], BGPquant[1]["parms"]['aapl'][2,:])
+
+        ax.set_xlabel('Time')
+        ax.set_ylabel('bp')
+        ax.set_zlabel('bn')
+
+        plt.show()
         return BGPquant
+
+

@@ -56,7 +56,9 @@ class QuantileLoss(nn.Module):
     def forward(self, y_pred, y_true):
         # Ensure quantiles are on the same device as y_pred
         quantiles = self.quantiles.to(y_pred.device)
-
+        # print(y_pred)
+        # print(y_pred.shape)
+        # print(y_true.shape)
         y_pred = y_pred.view(y_true.shape[0], 2, -1)  # Now shape: (Batch size, 2, 2)
         y_true = y_true.unsqueeze(-1)  # Shape: (batch_size, 2, 1)
 
@@ -65,6 +67,23 @@ class QuantileLoss(nn.Module):
 
         return loss.mean()
 
+class ProbQuantileLoss(nn.Module):
+    def __init__(self, quantiles=(0.1, 0.9)):
+        super().__init__()
+        self.register_buffer('quantiles', torch.tensor(quantiles))  # Register quantiles as a buffer
+
+    def forward(self, y_pred, y_true, clusters):
+        # Ensure quantiles are on the same device as y_pred
+        quantiles = self.quantiles.to(y_pred.device)
+
+        y_pred = y_pred.view(y_true.shape[0], 2, -1)  # Now shape: (Batch size, 2, num)
+        # do something like y_pred clusters[i]
+        y_true = y_true.unsqueeze(-1)  # Shape: (batch_size, 2, 1)
+
+        errors = y_true - y_pred  # Shape: (batch_size, 2, num_quantiles)
+        loss = torch.max(quantiles * errors, (quantiles - 1) * errors)
+
+        return loss.mean()
 
 
 
@@ -219,6 +238,15 @@ class TransformerModel(nn.Module):
         return train_errors, val_errors
 
 
+class ProbTransformer(TransformerModel):
+    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=(0.1, 0.9), device='cpu'):
+        super().__init__(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles, device)
+        self.prob_layer = nn.Softmax(dim=-1)
+
+    def forward(self,src):
+        out = super().forward(src) # output batch size, output dim
+        return self.prob_layer(out) # perform softmax on it s
+
 
 class Transformer(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
@@ -363,7 +391,8 @@ class Transformer2D(BaseClass):
         for t in self.tickers:
             self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
             self.models[t] = {}
-            self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
+            # self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
+            self.models[t] = ProbTransformer(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
             self.train_pred[t] = {}
             self.valid_pred[t] = {}
             self.test_pred[t] = {}
@@ -521,17 +550,4 @@ class Transformer2D(BaseClass):
 
 
         return
-
-
-class ProbTransformer(TransformerModel):
-    def __init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=(0.1, 0.9), device='cpu'):
-        super().__init__(self, input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles, device)
-        self.prob_layer = nn.Softmax()
-
-    def forward(self,src):
-        out = super().forward(self, src) # output batch size, output dim
-        return self.prob_layer(out, dim=-1) # perform softmax on it     
-
-
-
-
+    

@@ -6,7 +6,7 @@ import numpy as np
 from BaseEnv import BaseClass
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from Transformer import TransformerModel
+from Transformer import TransformerModel, ProbTransformer
 
 # input dim should be 4, output dim is 4
 class Transformer4D(BaseClass):
@@ -32,7 +32,7 @@ class Transformer4D(BaseClass):
         for t in self.tickers:
             self.train_series[t] = np.concatenate( (self.y_train[t],self.y_valid[t],self.y_test[t]), axis=0)
             self.models[t] = {}
-            self.models[t] = TransformerModel(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
+            self.models[t] = ProbTransformer(input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, dropout, scale, quantiles=quantiles, device = self.device)
             self.train_pred[t] = {}
             self.valid_pred[t] = {}
             self.test_pred[t] = {}

@@ -35,7 +35,7 @@ class BaseClass(dataclass):
             self.BG[t] = BG[:][1:-1]
             self.df[t] = pd.DataFrame(np.transpose(self.BG[t]), columns = ["bp","cp","bn","cn"])
             self.dates[t] = [str(int(d)) for d in BG[:][0]]
-            self.dates[t] = [dt.strptime(d, '%Y%m%d') for d in self.dates[t]]
+            # self.dates[t] = [dt.strptime(d, '%Y%m%d') for d in self.dates[t]] # causes errors with correct quantization
         self.feature_steps = feature_steps
         self.target_steps = target_steps
         self.ts = {}
@@ -64,6 +64,8 @@ class BaseClass(dataclass):
             self.scaler[t].fit(self.ts[t])
             self.ts[t] = self.scaler[t].transform(self.ts[t])
             self.X[t], self.y[t] = self.ts_split(self.ts[t])
+            print(self.ts[t].shape)
+            print(f"unique {len(np.unique(self.ts[t][:,0]))}")
             self.split_ind[t] = int(self.X[t].shape[0]*0.8)
             self.X_train_full[t], self.y_train_full[t] = self.X[t][:self.split_ind[t]], self.y[t][:self.split_ind[t]]
             self.X_test[t], self.y_test[t] = self.X[t][self.split_ind[t]:], self.y[t][self.split_ind[t]:]
