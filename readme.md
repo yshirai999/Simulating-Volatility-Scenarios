@@ -2,7 +2,7 @@
 
 - The purpose of this research is to analyse the time series of Bilateral Gamma parameters daily calibrated to options prices.
 
-- Specifically, we aim at predicting the next day bp and bn parameters, which correspond to the shape parameter for the gamma process of gains and of losses respectively
+- Specifically, we aim at predicting (bp,cp,bn,cn), which correspond to the shape and scale parameters for the gamma process of gains and of losses respectively.
 
 ## Data format
 
