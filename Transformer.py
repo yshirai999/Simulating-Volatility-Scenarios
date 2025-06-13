@@ -341,7 +341,7 @@ class Transformer(BaseClass):
 class Transformer2D(BaseClass):
     def __init__(self, tickers, feature_steps, target_steps, scaler,
                 input_dim, d_model, num_heads, num_layers, dim_feedforward, output_dim, seq_length, 
-                dropout, quantized,quant_all, n_clusters, scale, num_epochs, quantiles=(0.1,0.9), device='cpu'):
+                dropout, quantized, quant_all, n_clusters, scale, num_epochs, quantiles=(0.1,0.9), device='cpu'):
         super().__init__(tickers=tickers, feature_steps = feature_steps, target_steps = target_steps, scaler = scaler, quantized=quantized, quant_all=quant_all, nclusters=n_clusters)
         self.num_epochs = num_epochs
         self.valid_pred = {}
