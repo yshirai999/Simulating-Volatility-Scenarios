@@ -4,6 +4,16 @@
 
 - Specifically, we aim at predicting (bp,cp,bn,cn), which correspond to the shape and scale parameters for the gamma process of gains and of losses respectively.
 
+## About the Author
+
+**Yoshihiro Shirai** is a Pearson Fellow at the University of Washington with expertise in applied mathematics, quantitative modeling, and macro strategy research.
+
+- 🔗 [LinkedIn](https://www.linkedin.com/in/yoshihiro-shirai/)
+- 📖 [Google Scholar](https://scholar.google.com/citations?user=...)
+- 💻 [GitHub](https://github.com/yshirai999)
+- 🌐 [Personal Website](https://www.yoshihiroshirai.com)
+
+
 ## Data format
 
 - The k-th input data file must be a .mat file named BGPk and in the folder Data1
